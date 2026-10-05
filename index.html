@@ -112,7 +112,7 @@ canvas#map{display:block;width:100%;aspect-ratio:1/1;border:4px solid #3a3346;bo
 <div class="app">
   <header>
     <h1><span id="worldName">魔塔</span><small id="worldSub">MAGIC TOWER · 51F</small></h1>
-    <div class="hint">方向键 / WASD 移动 · 走向怪物即战斗 · 走向门自动用钥匙 · B 背包 · F 传送 · 鼠标悬停任何格子查看说明</div>
+    <div class="hint">点击任意格子自动走过去（点怪物即战斗、点门即开门）· 也可用方向键 / WASD · B 背包 · F 传送 · 悬停查看说明</div>
   </header>
 
   <div class="board">
@@ -809,7 +809,7 @@ function tryMove(dx,dy){
   if (ch==='.' || ch==='^') { G.x=nx; G.y=ny; }
   else if (ch==='>' ) { if(G.floor+1>=G.maps.length){ render(); return; } G.x=nx;G.y=ny; const p=stairsOf(G.floor+1,'<'); G.floor++; G.x=p.x; G.y=p.y; G.maxFloor=Math.max(G.maxFloor,G.floor);
     if (G.floor===ARENA && !G.arena){ setupArena(false); log('试炼之间：站到楼梯口上方的召唤阵上，3 秒后深渊魔将会率队列阵；每清空一波再站上去，下一波更强（×1.15），回报涨得更慢（×1.08）。这里没有药水，吸血减半。',true); } log(`来到${floorLabel(G.floor)}。`); save(true); }
-  else if (ch==='<' && BRANCHES.some(b=>b.start===G.floor)) { const br=BRANCHES.find(b=>b.start===G.floor); const p=stairsOf(br.from,'!'); G.floor=br.from; G.x=p.x; G.y=p.y; log(`回到${floorLabel(br.from)}。`); }
+  else if (ch==='<' && BRANCHES.some(b=>b.start===G.floor)) { const br=BRANCHES.find(b=>b.start===G.floor); const p=stairsOf(br.from,'!')||stairsOf(br.from,'6')||stairsOf(br.from,'<'); G.floor=br.from; if(p){ G.x=p.x; G.y=p.y; } log(`回到${floorLabel(br.from)}。`); }
   else if (ch==='<') { if(G.floor===0){ render(); return; } const p=stairsOf(G.floor-1,'>'); G.floor--; G.x=p.x; G.y=p.y; log(`回到${floorLabel(G.floor)}。`); }
   else if (DOOR[ch]) { const k=DOOR[ch]; if(h[k]>0){ h[k]--; m[ny][nx]='.'; log(`用${ITEM[k[0]].name}打开了门。`);} else log(`需要${ITEM[k[0]].name}。`); }
   else if (ch==='S'||ch==='T') {
@@ -1044,6 +1044,7 @@ function render(){
     if (x1>=0) ctx.drawImage(spriteImg('shop'+shopStar(G.floor)), x0*T, y0*T, (x1-x0+1)*T, (y1-y0+1)*T); }
   if (BATTLE){ const now=performance.now(); if (stepBattle(now)){ drawBattle(now); requestAnimationFrame(render); } return; }
   ctx.drawImage(spriteImg('hero_'+(G.face||'d')),G.x*T,G.y*T,T,T);
+  if (AUTO){ ctx.save(); ctx.fillStyle='rgba(255,224,138,.55)'; for (let i=AUTO.i;i<AUTO.path.length;i++){ const [px,py]=AUTO.path[i]; ctx.beginPath(); ctx.arc(px*T+T/2, py*T+T/2, 4, 0, Math.PI*2); ctx.fill(); } ctx.restore(); }
   drawFloats(); tickSummon(performance.now());
   if (flashCell){ const a=1-(performance.now()-flashCell.t)/220; if(a>0){ ctx.fillStyle=`rgba(255,120,80,${a*.6})`; ctx.fillRect(flashCell.x*T,flashCell.y*T,T,T); requestAnimationFrame(render);} else flashCell=null; }
   renderPanel(); renderManual(); renderLegend();
@@ -1102,15 +1103,58 @@ function log(msg,hi){ G.log.unshift({msg,hi}); G.log.length=Math.min(G.log.lengt
 const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0],W:[0,-1],S:[0,1],A:[-1,0],D:[1,0]};
 window.addEventListener('keydown',e=>{ const d=KEYS[e.key]; if(d){ e.preventDefault(); tryMove(d[0],d[1]); } else if (e.key==='Escape' && !overlay.hidden) closeDialog(); else if ((e.key==='f'||e.key==='F') && overlay.hidden && !BATTLE && G.hero.fly) openFly(); else if ((e.key==='b'||e.key==='B'||e.key==='i'||e.key==='I') && overlay.hidden && !BATTLE) openBag(); });
 document.getElementById('dpad').addEventListener('click',e=>{ const b=e.target.closest('button[data-d]'); if(!b) return; const [dx,dy]=b.dataset.d.split(',').map(Number); tryMove(dx,dy); });
+// ───────────── 点击自动寻路 ─────────────
+// 点一个格子：自动走过去；目标是怪物/门/NPC/商店时走到旁边再撞上去。途中会顺手捡道具，不会主动踩楼梯、暗梯、踏板、清场门。
+const WALK = 'ybr12hHSTM345+o&*';                 // 可顺路拾取的道具
+const passable = ch => ch==='.' || ch==='^' || WALK.includes(ch);
+let AUTO=null, pendingTarget=null;
+function stopAuto(){ if (AUTO){ clearTimeout(AUTO.timer); AUTO=null; } }
+function findPath(tx,ty){
+  const m=G.maps[G.floor]; const start=[G.x,G.y]; const key=(x,y)=>y*N+x;
+  const prev=new Map(); prev.set(key(G.x,G.y),-1); const q=[start];
+  const target=m[ty][tx]; const goalIsPass=passable(target);
+  while (q.length){
+    const [x,y]=q.shift();
+    if (goalIsPass && x===tx && y===ty) break;
+    if (!goalIsPass && Math.abs(x-tx)+Math.abs(y-ty)===1) { prev.set(key(tx,ty), key(x,y)); break; }
+    for (const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=N||ny>=N) continue;
+      const k=key(nx,ny); if (prev.has(k)) continue; const c=m[ny][nx];
+      if (!passable(c)) continue; prev.set(k,key(x,y)); q.push([nx,ny]); }
+  }
+  if (!prev.has(key(tx,ty))) return null;
+  const path=[]; let k=key(tx,ty); while (k!==-1 && k!==key(G.x,G.y)){ path.push([k%N, Math.floor(k/N)]); k=prev.get(k); }
+  return path.reverse();
+}
+function autoGo(tx,ty){
+  stopAuto(); if (G.won||G.dead||!overlay.hidden||BATTLE) return;
+  const m=G.maps[G.floor]; const ch=m[ty]&&m[ty][tx]; if (ch===undefined||ch==='#'||(tx===G.x&&ty===G.y)) return;
+  // 目标是会掉大量血的怪物时，先预览，再点一次才出发
+  if (MON[ch]){ const b=battleInfo(ch); const pk=G.floor+':'+tx+','+ty;
+    if (!b.ok){ log(`${MON[ch].name}：你的攻击打不穿它的防御。`); return; }
+    if (b.worst>=G.hero.hp){ log(`${MON[ch].name}最坏会造成 ${b.worst} 伤害，现在去是送死。`); return; }
+    if (b.dmg>G.hero.hp*0.3 && pendingTarget!==pk){ pendingTarget=pk; log(`${MON[ch].name}：预计损失 ${b.dmg} 生命（${Math.round(b.dmg/G.hero.hp*100)}%）。再点一次确认前往。`); return; } }
+  pendingTarget=null;
+  const path=findPath(tx,ty); if (!path){ log('走不到那里。'); return; }
+  AUTO={path, i:0, timer:null};
+  const step=()=>{
+    if (!AUTO || !overlay.hidden || BATTLE){ if (AUTO && (BATTLE||!overlay.hidden)) { AUTO.timer=setTimeout(step, 200); } return; }   // 战斗/弹窗中等待
+    if (AUTO.i>=AUTO.path.length){ AUTO=null; return; }
+    const [nx,ny]=AUTO.path[AUTO.i]; const dx=Math.sign(nx-G.x), dy=Math.sign(ny-G.y);
+    if (Math.abs(nx-G.x)+Math.abs(ny-G.y)!==1){ AUTO=null; return; }          // 位置变了（换层/传送），停
+    const before=G.floor+':'+G.x+','+G.y; tryMove(dx,dy);
+    const last = AUTO && AUTO.i===AUTO.path.length-1;
+    if (AUTO){ AUTO.i++; if (last){ AUTO=null; return; }
+      if (G.floor+':'+G.x+','+G.y===before){ AUTO=null; return; }               // 没走动（被挡），停
+      AUTO.timer=setTimeout(step, Math.max(40, 110/SET.speed)); }
+  };
+  step();
+}
 cv.addEventListener('click',e=>{
   const r=cv.getBoundingClientRect(); const x=Math.floor((e.clientX-r.left)/r.width*N), y=Math.floor((e.clientY-r.top)/r.height*N);
-  const ch=G.maps[G.floor][y]&&G.maps[G.floor][y][x];
-  if (MON[ch]){ const mo=MON[ch], b=battleInfo(ch);
-    if (!G.hero.manual) { log(`${mo.name}：没有怪物手册，看不出它的底细。`); return; }
-    log(!b.ok?`${mo.name}：你的攻击打不穿它的防御。`:`${mo.name}：约 ${b.turns} 回合，预计损失 ${b.dmg} 生命（最坏 ${b.worst}）。`); return; }
-  const d=describe(ch); if (d) log(d.replace(/<[^>]+>/g,''));
+  autoGo(x,y);
 });
-
+window.addEventListener('keydown',e=>{ if (KEYS[e.key]) stopAuto(); }, true);
+document.getElementById('dpad').addEventListener('click',()=>stopAuto(), true);
 // ───────────── 存档 ─────────────
 const SAVE_KEY='mota-worlds-save-v2';
 function save(auto){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(G)); if(!auto) log('已存档。'); }catch(e){ if(!auto) log('这个浏览器不允许存档。'); } }
