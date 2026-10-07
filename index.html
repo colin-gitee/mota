@@ -82,6 +82,7 @@ canvas#map{display:block;width:100%;aspect-ratio:1/1;border:4px solid #3a3346;bo
 .card .ops{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px} .mini.warn{border-color:#6a3a3a} .mini:disabled{opacity:.4;cursor:not-allowed}
 .dialog.dex{max-width:560px}
 .dexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.qtab{border-collapse:collapse;width:100%;font-size:12.5px;margin:4px 0 6px}.qtab th,.qtab td{border:1px solid rgba(255,255,255,.12);padding:3px 6px;text-align:center}.qtab th{color:var(--dim);font-weight:500}
 .dexc{background:var(--stone-2);border:1px solid var(--line);border-radius:6px;padding:6px 4px;text-align:center}
 .dexc.elite{border-color:#ffd34d} .dexc.boss{border-color:#ff5a2a}
 .dexc img{width:48px;height:48px;display:block;margin:0 auto 2px}
@@ -325,9 +326,9 @@ const DESC = (ch,f) => {
   if (ch==='+') return '圣水：放入背包，随时使用，回复当前生命的 30%——血越多时用越划算';
   if (it) return it.k==='hp'?`${it.name}：生命 +${it.v}` : it.k==='atk'?`${it.name}：攻击 +${it.v}` : it.k==='def'?`${it.name}：防御 +${it.v}` : it.k==='manual'?'怪物手册：显示每个怪物的预计伤害' : `${it.name}：打开一扇${it.name[0]}门（消耗）`;
   const sp = {m:'贤者：走上去对话，会给你提示', '6':'裂纹墙：连撞两次可以打穿，里面藏着东西', '7':'机关踏板：踩下去会打开本层的机关墙', '8':'机关墙：找到本层的踏板才能打开',
-    '9':'祭坛：献祭 30% 当前生命，换取攻击与防御（一次性）', '0':'诅咒宝箱：打开后随机发生好事或坏事', o:'宝箱：金币 + 攻击 + 防御', '&':'精华袋：精华 +20', '*':'黄金宝匣：一件金色装备', '!':'暗梯：通往不在图纸上的隐藏楼层', '%':'清场门：杀光本层所有怪物后才会打开', '^':'召唤阵：站上去 3 秒，召唤下一波试炼军团', '?':'长老：讲述故事背景，并赠送初始物品', '~':'云梯：踏上去直通两层之上或之下的另一座云梯', '=':'岩浆：可以走，每步掉 5% 当前生命，能抄近路', '_':'驿站：付金币坐马车去任意到过的驿站', ',':'漩涡：把你卷到本层另一座漩涡'};
+    '9':'祭坛：献祭 30% 当前生命，换取攻击与防御（一次性）', '0':'诅咒宝箱：打开后随机发生好事或坏事', o:'宝箱：金币 + 攻击 + 防御', '&':'精华袋：精华 +20', '*':'黄金宝匣：一件比本段固定装备高一档颜色的装备（最高金色）', '!':'暗梯：通往不在图纸上的隐藏楼层', '%':'清场门：杀光本层所有怪物后才会打开', '^':'召唤阵：站上去 3 秒，召唤下一波试炼军团', '?':'长老：讲述故事背景，并赠送初始物品', '~':'云梯：踏上去直通两层之上或之下的另一座云梯', '=':'岩浆：可以走，每步掉 5% 当前生命，能抄近路', '_':'驿站：付金币坐马车去任意到过的驿站', ',':'漩涡：把你卷到本层另一座漩涡'};
   if (sp[ch]) return sp[ch];
-  return {Y:'黄门：走上去自动消耗 1 把黄钥匙', B:'蓝门：需要 1 把蓝钥匙', R:'红门：需要 1 把红钥匙', '>':'上楼梯', '<':'下楼梯', '$':`${SHOP_NAMES[shopStar(f)]} ${STAR.repeat(shopStar(f))}：${['','生命 / 攻击 / 防御','攻防 / 黄钥匙','攻防 / 精华','攻防 / 精华 / 蓝紫装备','攻防 / 精华 / 紫金装备 / 直接升级'][shopStar(f)]}`, O:'老人：出售钥匙', Q:`${worldOf().goal}：抵达即通关`}[ch]||null;
+  return {Y:'黄门：走上去自动消耗 1 把黄钥匙', B:'蓝门：需要 1 把蓝钥匙', R:'红门：需要 1 把红钥匙', '>':'上楼梯', '<':'下楼梯', '$':`${SHOP_NAMES[shopStar(f)]} ${STAR.repeat(shopStar(f))}：${['','生命 / 攻击 / 防御','攻防 / 黄钥匙','攻防 / 精华','攻防 / 精华 / 本段颜色装备','攻防 / 精华 / 本段颜色装备 / 直接升级'][shopStar(f)]}`, O:'老人：出售钥匙', Q:`${worldOf().goal}：抵达即通关`}[ch]||null;
 };
 const spriteKeyOf = (ch,f) => (ch==='S'||ch==='T') ? (equipOf(ch,f).v>=45*wsa() ? 'silver'+ch : ch) : ch==='3'?'hat':ch==='4'?'boots':ch==='5'?'ring':ch==='o'?'chest':ch==='m'?'sage':ch==='Q'?goalSprite():ch;
 const needExp = l => 20*l*(l+3);
@@ -363,7 +364,10 @@ let _eqId = 1;
 function eqValue(e){ const sl=SLOTS[e.slot]; const v=e.base*QUAL[e.q].m*(1+0.25*(e.lvl-1)); /* 每级 +25% 基础值，Lv10 = 3.25 倍 */ return Math.min(sl.cap, sl.unit==='%' ? Math.round(v*10)/10 : Math.round(v)); }   // 攻防取整，百分比保留一位小数
 function eqName(e){ const sl=SLOTS[e.slot]; return `${e.mat||QUAL[e.q].n}${sl.name}`; }
 function eqLabel(e){ const sl=SLOTS[e.slot]; return `${eqName(e)} Lv${e.lvl} · ${sl.stat==='atk'?'攻击':sl.stat==='def'?'防御':sl.stat==='dodge'?'闪避':sl.stat==='crit'?'暴击':'吸血'} +${eqValue(e)}${sl.unit}`; }
-function makeEq(slot, q, f, mat){ const b=SLOTS[slot].base(f); return {id:_eqId++, slot, q, lvl:1, base:b, base0:b, wk0:(G?WORLD_ORDER.indexOf(G.world):0), mat:mat||null, floor:f+1}; }
+const QV = [0,10,25,45,70,100];   /* 剑盾按颜色定初始攻防：白10 绿25 蓝45 紫70 金100（× 本界尺度），与铁/钢/银/秘银/龙骨一一对应 */
+const eqTier = f => { f=effFloor(f); return f<13?1:f<23?2:f<33?3:f<43?4:5; };   /* 当前楼层段对应的固定装备颜色 */
+const capQ = (q,f) => Math.max(1, Math.min(5, q, eqTier(f)+1));   /* 随机装备最多比本段固定装备高一档 */
+function makeEq(slot, q, f, mat){ const b=(slot==='sword'||slot==='shield') ? Math.round(QV[q]*wsa()/QUAL[q].m*100)/100 : SLOTS[slot].base(f); return {id:_eqId++, slot, q, lvl:1, base:b, base0:b, wk0:(G?WORLD_ORDER.indexOf(G.world):0), mat:mat||null, floor:f+1}; }
 function bonus(stat){ let v=0; for (const k in SLOTS){ const e=G.hero.equip[k]; if(e && SLOTS[k].stat===stat) v+=eqValue(e); } return Math.min(SLOTS[Object.keys(SLOTS).find(k=>SLOTS[k].stat===stat)].cap, v); }
 const effAtk  = () => Math.round(G.hero.atk + bonus('atk'));
 const effDef  = () => Math.round(G.hero.def + bonus('def'));
@@ -398,7 +402,8 @@ function rollDrop(mo, f){
   // 品质：楼层越高、星级越高越容易出高品质
   const t = f/50 + mo.star*0.06 + (mo.boss?0.5:0);
   const q = Math.random()<t*0.10 ? 5 : Math.random()<t*0.25 ? 4 : Math.random()<t*0.5 ? 3 : Math.random()<0.45 ? 2 : 1;
-  return makeEq(slot, q, f);
+  let qq = capQ(q, f); if (mo.boss||mo.elite) qq = capQ(Math.max(qq, eqTier(f) + (Math.random()<0.3?1:0)), f);   /* Boss / 精英：至少本段颜色，30% 高一档 */
+  return makeEq(slot, qq, f);
 }
 // 期望与最坏情况：预览用期望，是否允许开打用最坏情况（无暴击、无闪避）
 function battleInfo(ch){
@@ -1059,7 +1064,7 @@ function tryMove(dx,dy){
   else if (ch==='0') { openCurse(nx,ny); }
   else if (ch==='o') { const g=15*G.floor, v=gemV(G.floor); h.gold+=g; h.atk+=v; h.def+=v; m[ny][nx]='.'; G.x=nx; G.y=ny; flashText(nx,ny,`+${g}金 攻防+${v}`,'#ffe08a'); log(`打开宝箱：金币 +${g}，攻击 +${v}，防御 +${v}。`,true); }
   else if (ch==='&') { h.essence+=20; m[ny][nx]='.'; G.x=nx; G.y=ny; flashText(nx,ny,'精华 +20','#b86ae0'); log('精华袋：精华 +20。',true); }
-  else if (ch==='*') { m[ny][nx]='.'; G.x=nx; G.y=ny; const slots=['sword','shield','boots','hat','ring']; gainEquip(makeEq(slots[Math.floor(Math.random()*5)],5,G.floor),'黄金宝匣里是'); }
+  else if (ch==='*') { m[ny][nx]='.'; G.x=nx; G.y=ny; const slots=['sword','shield','boots','hat','ring']; gainEquip(makeEq(slots[Math.floor(Math.random()*5)],capQ(eqTier(G.floor)+1,G.floor),G.floor),'黄金宝匣里是'); }
   else if (ch==='!') { const br=branches().find(b=>b.from===G.floor); if (br){ const p=stairsOf(br.start,'<'); G.floor=br.start; G.x=p.x; G.y=p.y; log(`你沿暗梯而上，进入了不在图纸上的隐藏楼层……（这条支线共 ${br.n} 层${br.vault?'，尽头是宝库':''}）`,true); save(true); } }
   else if (ch==='~') {   // 云梯：与两层之上/之下的云梯互通
     const f=G.floor; const sf=wstruct().elites; const other = (G.maps[f+2]&&G.maps[f+2].some(r=>r.includes('~'))) ? f+2 : (G.maps[f-2]&&G.maps[f-2].some(r=>r.includes('~'))) ? f-2 : null;
@@ -1095,7 +1100,7 @@ function openShop(){
   opts.push([`防御 +${fmt(gain.def)}`, price+' 金', ()=>pay(price,()=>h.def+=gain.def,`防御 +${fmt(gain.def)}`), h.gold<price||sold]);
   if (st===2){ const kp=Math.round(price*0.6); opts.push([`黄钥匙 ×2`, kp+' 金', ()=>pay(kp,()=>h.ykey+=2,'黄钥匙 ×2'), h.gold<kp]); }
   if (st>=3){ const ep=Math.round(price*0.8), ess=st*3; opts.push([`精华 ×${ess}（装备升级材料）`, ep+' 金', ()=>pay(ep,()=>h.essence+=ess,`精华 ×${ess}`), h.gold<ep]); }
-  if (st>=4){ const qp=Math.round(price*2.5), minq=st===4?3:4; opts.push([`随机${QUAL[minq].n}色以上装备`, qp+' 金', ()=>pay(qp,()=>{ const slots=['sword','shield','boots','hat','ring']; const q=Math.random()<0.3?minq+1:minq; gainEquip(makeEq(slots[Math.floor(Math.random()*5)], q, f), '买到了'); },'随机装备'), h.gold<qp]); }
+  if (st>=4){ const qp=Math.round(price*2.5), minq=eqTier(f); opts.push([`随机${QUAL[minq].n}色以上装备（30% 高一档）`, qp+' 金', ()=>pay(qp,()=>{ const slots=['sword','shield','boots','hat','ring']; const q=capQ(Math.random()<0.3?minq+1:minq, f); gainEquip(makeEq(slots[Math.floor(Math.random()*5)], q, f), '买到了'); },'随机装备'), h.gold<qp]); }
   if (st===5){ const xp=Math.round(price*1.5), e=needExp(h.lvl)-h.exp; opts.push([`直接升一级（经验 +${e}）`, xp+' 金', ()=>pay(xp,()=>gainExp(e),'升级'), h.gold<xp]); }
   opts.push(['离开', null, null]);
   dialog(`${SHOP_NAMES[st]} <span class="stars">${STAR.repeat(st)}</span>`, `${floorLabel(f)} · 当前每次 <b style="color:var(--brass)">${price}</b> 金，${n>=SHOP_CAP_N?'<b style="color:var(--brass)">已到封顶价</b>，之后不再涨价。':`每买一次涨价 15%，再买 ${SHOP_CAP_N-n} 次封顶（最高为基价 ×4），不会售罄。`}你有 ${h.gold} 金。`, opts);
@@ -1168,7 +1173,7 @@ function openCurse(x,y){
     ['打开', null, ()=>{ G.maps[f][y][x]='.'; const r=Math.random(); let msg;
       if (r<0.25){ const g=40*f; h.gold+=g; msg=`里面是满满的金币：金币 +${g}。`; }
       else if (r<0.45){ const v=2*gemV(f); h.atk+=v; h.def+=v; msg=`一股暖流涌入：攻击 +${v}，防御 +${v}。`; }
-      else if (r<0.55){ const slots=['sword','shield','boots','hat','ring']; gainEquip(makeEq(slots[Math.floor(Math.random()*5)], Math.random()<0.4?4:3, f),'箱子里是'); msg='箱子里躺着一件装备。'; }
+      else if (r<0.55){ const slots=['sword','shield','boots','hat','ring']; gainEquip(makeEq(slots[Math.floor(Math.random()*5)], capQ(eqTier(f)+(Math.random()<0.4?1:0), f), f),'箱子里是'); msg='箱子里躺着一件装备。'; }
       else if (r<0.75){ const l=Math.floor(h.hp*0.25); h.hp-=l; msg=`一团黑雾扑面而来：生命 -${l}。`; }
       else if (r<0.9){ const ks=['ykey','bkey','rkey'].filter(k=>h[k]>0); if(ks.length){ const k=ks[Math.floor(Math.random()*ks.length)]; h[k]--; msg=`一只小鬼抢走了你的${ITEM[k[0]].name}。`; } else { const g=Math.floor(h.gold*0.3); h.gold-=g; msg=`小鬼偷走了 ${g} 金币。`; } }
       else { const g=Math.floor(h.gold*0.3); h.gold-=g; msg=`箱子里是个空洞，吞掉了你 ${g} 金币。`; }
@@ -1442,12 +1447,15 @@ function openBag(view){
       <div class="st">兑换金币：1 精华 → <b>${essRate()}</b> 金（按当前楼层）</div>
       <div class="ops"><button class="mini" data-ex="1" ${h.essence>=1?'':'disabled'}>换 1</button><button class="mini" data-ex="10" ${h.essence>=10?'':'disabled'}>换 10</button><button class="mini" data-ex="all" ${h.essence>=1?'':'disabled'}>全部兑换</button></div></div></div>`;
   const rules = `<div class="rules">
-    <p><b>品质</b>：白 ×1.0 · <span style="color:#6cc46f">绿</span> ×1.3 · <span style="color:#5a9df0">蓝</span> ×1.65 · <span style="color:#b86ae0">紫</span> ×2.1 · <span style="color:#f2cf4e">金</span> ×2.7（乘在基础属性上）。</p>
+    <p><b>颜色决定初始属性</b>（Lv1，本界数值）：</p>
+    <table class="qtab"><tr><th></th><th>剑 攻击 / 盾 防御</th><th>鞋 闪避</th><th>帽 暴击</th><th>戒指 吸血</th></tr>
+    ${[1,2,3,4,5].map(q=>`<tr><td style="color:${QUAL[q].c}">${QUAL[q].n}</td><td>${fmt(QV[q]*wsa())}</td><td>${Math.round(3*QUAL[q].m*10)/10}%</td><td>${Math.round(4*QUAL[q].m*10)/10}%</td><td>${Math.round(3*QUAL[q].m*10)/10}%</td></tr>`).join('')}</table>
+    <p class="dim">固定剑盾的材质对应颜色：铁=白、钢=绿、银=蓝、秘银=紫、龙骨=金。同部位颜色越高一定越强。随机掉落最多比当前楼层段的固定装备高一档（1–12 层最高绿，13–22 层最高蓝，23–32 层最高紫，33 层起可出金）；Boss / 精英至少掉本段颜色。</p>
     <p><b>升级</b>：最高 Lv${MAXLVL}，每级 +25% 基础属性（Lv10 = 3.25 倍）。第 N 级消耗 N 颗精华，升满共 45 颗。</p>
     <p><b>熔炼</b>：返还 品质² + 已投入精华 × 80%。例：蓝色 Lv5 → 9 + 10×0.8 = 17 精华。多余的精华可以在道具页按当前楼层的价格换成金币。</p>
-    <p><b>商店</b>：每买一次涨 15%，不限次数；高星商店还卖精华与装备。</p>
+    <p><b>商店</b>：每买一次涨 15%，买满 20 次封顶（基价 ×4），不会售罄；高星商店还卖精华与装备。</p>
     <p><b>上限</b>：闪避 60% · 暴击 80% · 吸血 50%；攻防无上限。暴击伤害 2 倍，吸血按造成伤害回血。</p>
-    <p><b>掉落</b>：★1 3%、每星 +2%，Boss / 精英必掉；高层与高星更易出高品质。保底：剑盾在 3/4、13/14、23/24、33/34、43/44 层，帽鞋戒在 6~8、26~28、46~48 层。</p></div>`;
+    <p><b>掉落</b>：★1 3%、每星 +2%，Boss / 精英必掉；高层与高星更易出高颜色。保底：剑盾在 3/4、13/14、23/24、33/34、43/44 层，帽鞋戒在 6~8、26~28、46~48 层。</p></div>`;
   d.innerHTML=`<div class="bagHead"><h3>背包</h3><div class="tabs"><button class="mini tab${view==='gear'?' cur':''}" data-view="gear">装备</button><button class="mini tab${view==='items'?' cur':''}" data-view="items">道具</button><button class="mini tab${view==='rules'?' cur':''}" data-view="rules">规则</button></div></div>
     <div class="res">金币 <b style="color:var(--brass)">${fmt(h.gold)}</b> · 精华 <b style="color:#b86ae0">${h.essence}</b></div>
     ${view==='gear'?`<div class="sec">已装备</div><div class="cards">${slots}</div><div class="sec">背包（${h.bag.length}/30）</div><div class="cards">${bag}</div>`:view==='items'?`<div class="cards">${items}</div>`:rules}
@@ -1547,9 +1555,10 @@ document.getElementById('loadBtn').onclick=()=>{ if(overlay.hidden && !BATTLE) l
 document.getElementById('resetBtn').onclick=()=>{ if(!overlay.hidden||BATTLE) return; dialog('重新开始？','当前进度会丢失（存档不受影响）。',[['选择世界并重新开始',null,()=>{chooseWorld();}],['取消',null,null]]); };
 
 // ───────────── 启动（含热更新保留进度）─────────────
-const MAP_VERSION = 34;   // 地图数据版本：升级时把存档里未到过的楼层换成新图，到过的楼层补上新增道具
+const MAP_VERSION = 35;   // 地图数据版本：升级时把存档里未到过的楼层换成新图，到过的楼层补上新增道具
 function migrateMaps(){
   if (G.mapVersion === MAP_VERSION) return;
+  if ((G.mapVersion||0) < 35 && G.hero){ for (const e of [...(G.hero.bag||[]), ...Object.values(G.hero.equip||{})]) if (e && (e.slot==='sword'||e.slot==='shield')){ const k0=e.wk0==null?WORLD_ORDER.indexOf(G.world):e.wk0; e.wk0=k0; e.base0=Math.round(QV[e.q]*(WORLDS[k0].sa||1)/QUAL[e.q].m*100)/100; e.base=eqBaseIn(e, WORLD_ORDER.indexOf(G.world)); } }   /* 剑盾改为按颜色定值 */
   if ((G.mapVersion||0) < 34 && G.hero){ const k=WORLD_ORDER.indexOf(G.world); for (const e of [...(G.hero.bag||[]), ...Object.values(G.hero.equip||{})]) if (e && e.wk0==null){ e.wk0=k; e.base0=e.base; } }
   const W=worldOf(); if (!W.maps) return; let patched=0;
   if ((G.mapVersion||0) < 31 && G.worlds){   // 各界支线结构有变：隐藏层全部重置，站在隐藏层里的话送回入口层
